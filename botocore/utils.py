@@ -25,7 +25,7 @@ import socket
 import time
 import warnings
 import weakref
-from datetime import datetime as _DatetimeClass
+from email.utils import parsedate_to_datetime
 from ipaddress import ip_address
 from pathlib import Path
 from urllib.request import getproxies, proxy_bypass
@@ -951,8 +951,22 @@ def parse_timestamp(value):
         * epoch (value is an integer)
 
     This will return a ``datetime.datetime`` object.
-
     """
+    if isinstance(value, str):
+        if value.endswith("GMT"):
+            # Fast path: assume RFC822-with-GMT
+            try:
+                return parsedate_to_datetime(value)
+            except Exception:
+                pass
+        if value.endswith(("Z", "+00:00", "+0000")):
+            # Fast path: looks like ISO8601 UTC
+            try:
+                # New in version 3.7
+                return datetime.datetime.fromisoformat(value)
+            except Exception:
+                pass
+
     if isinstance(value, (int, float)):
         # Possibly an epoch time.
         return _epoch_seconds_to_datetime(value)
@@ -999,7 +1013,7 @@ def parse_to_aware_datetime(value):
     # converting the provided value to a string timestamp suitable to be
     # serialized to an http request. It can handle:
     # 1) A datetime.datetime object.
-    if isinstance(value, _DatetimeClass):
+    if isinstance(value, datetime.datetime):
         datetime_obj = value
     else:
         # 2) A string object that's formatted as a timestamp.
@@ -1620,7 +1634,7 @@ class S3ExpressIdentityCache(IdentityCache):
         return refresher
 
     def _serialize_if_needed(self, value, iso=False):
-        if isinstance(value, _DatetimeClass):
+        if isinstance(value, datetime.datetime):
             if iso:
                 return value.isoformat()
             return value.strftime('%Y-%m-%dT%H:%M:%S%Z')
@@ -3519,7 +3533,7 @@ class JSONFileCache:
         return full_path
 
     def _serialize_if_needed(self, value, iso=False):
-        if isinstance(value, _DatetimeClass):
+        if isinstance(value, datetime.datetime):
             if iso:
                 return value.isoformat()
             return value.strftime('%Y-%m-%dT%H:%M:%S%Z')
